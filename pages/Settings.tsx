@@ -86,6 +86,7 @@ export default function Settings({ navigation }) {
 
   const onSubmit = (data) => {
     // storeData(data)
+    // test commit
     storeData(data);
     console.log(data);
   };
