@@ -15,7 +15,7 @@ const Drawer = createDrawerNavigator();
 export default function Navigation() {
   const screenOptions: DrawerNavigationOptions = {
     headerStyle: {
-      backgroundColor: "#121212",
+      backgroundColor: "#121212", 
     },
     headerTintColor: "#fff",
     drawerActiveTintColor: config.tokens.colors.primary600,
