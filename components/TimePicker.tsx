@@ -11,6 +11,7 @@ import {
   SelectItem,
   SelectPortal,
   SelectTrigger,
+  ScrollView,
 } from "@gluestack-ui/themed";
 import { useState } from "react";
 
@@ -37,7 +38,7 @@ export default function TimePicker({ isOptional, onChange, value }: TimePickerPr
             <SelectDragIndicator />
           </SelectDragIndicatorWrapper>
           {Array.from({ length: 61 }, (value, index) => (
-            <SelectItem label={String(index)} value={index} />
+            <SelectItem key={index} label={String(index)} value={index} />
           ))}
         </SelectContent>
       </SelectPortal>

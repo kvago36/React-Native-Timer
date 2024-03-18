@@ -1,247 +1,472 @@
-import { StatusBar } from 'expo-status-bar';
-import { useEffect, useState, useRef } from 'react';
-import { StyleSheet } from 'react-native';
-import * as Progress from 'react-native-progress';
-import { Audio } from 'expo-av';
-import { Asset } from 'expo-asset';
-import { Box, Center, HStack, Heading, Text, View } from "@gluestack-ui/themed"
-import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
+import { StatusBar } from "expo-status-bar";
+import { useEffect, useState, useRef, useMemo } from "react";
+import { StyleSheet, useWindowDimensions } from "react-native";
+import { config } from "@gluestack-ui/config";
+import { Audio } from "expo-av";
+import { Asset } from "expo-asset";
+import {
+  Box,
+  Button,
+  ChevronRightIcon,
+  EditIcon,
+  CheckIcon,
+  HStack,
+  Text,
+  View,
+  ButtonIcon,
+} from "@gluestack-ui/themed";
+import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
+import { FontAwesome } from "@expo/vector-icons";
+import Animated, {
+  useSharedValue,
+  withTiming,
+  Easing,
+  useAnimatedStyle,
+  interpolateColor,
+  withRepeat,
+  withSequence,
+  cancelAnimation,
+} from "react-native-reanimated";
 
-import Button from '../components/Button'
-import Count from '../components/Count'
-import TimePicker from '../components/TimePicker';
-import TimerModal from '../view/TimerModal';
+import Count from "../components/Count";
+import TimePicker from "../components/TimePicker";
+import SettingsModal from "../view/SettingModal";
+import TimerModal from "../view/TimerModal";
+import CircularProgress from "../components/CircularProgress";
+import PlayerButton from "../components/PlayerButton";
 
-export type TimerSettings = {
-  wait?: number
-  rest?: number
-  round: number
-}
+import { Timer } from "../components/Timer";
 
-export default function Timer() {
-  const [started, setStarted] = useState(false)
-  const [paused, setPaused] = useState(false)
-  const [rounds, setRounds] = useState(1)
+import TimerButtons from "../view/TimerButtons";
 
-  // const [roundTime, setRoundTime] = useState(0)
-  const [playingTime, setPlayingTime] = useState(0)
-  // const [endTime, setEndTime] = useState(0)
+import { TimerSettings } from "../types";
+import { getSplittedTime } from "../utils";
 
-  const [settings, setSettings] = useState<TimerSettings>()
+export default function TimerPage() {
+  const [started, setStarted] = useState(false);
+  const [paused, setPaused] = useState(false);
+  const [rounds, setRounds] = useState(1);
 
-  const [isNeedConfirm, setIsNeedConfirm] = useState(false)
+  const { width } = useWindowDimensions();
 
-  const [isWaiting, setIsWaiting] = useState(false)
+  const [showActionsheet, setShowActionsheet] = useState(false);
 
-  const inRef = useRef(0)
-  const timeRef = useRef(0)
-  const modal = useRef(false)
+  const [isSecondsOpen, setIsSecondsOpen] = useState(false);
+  const [isMinutesOpen, setIsMinutesOpen] = useState(false);
 
-  const [isOpen, setIsOpen] = useState(false)
+  const [isSoundEnabled, setIsSoundEnabled] = useState(true);
+
+  const [playingTime, setPlayingTime] = useState(0);
+
+  const [settings, setSettings] = useState<TimerSettings>();
+
+  const timer = useRef<Timer>();
+
+  const [isNeedConfirm, setIsNeedConfirm] = useState(false);
+
+  const modal = useRef(false);
+  const roundsRef = useRef(0);
+
+  const timeToStart = useRef(0)
+  const timeMark = useRef(0)
+
+  const [isOpen, setIsOpen] = useState(false);
 
   const [sound, setSound] = useState();
 
   async function playSound() {
-    console.log('Loading Sound');
+    console.log("Loading Sound");
     try {
-      const [{ localUri }] = await Asset.loadAsync(require('../assets/062864_ese-24142.mp3'));
-  
-      const { sound } = await Audio.Sound.createAsync(localUri);
+      const [asset] = await Asset.loadAsync(
+        require("../assets/062864_ese-24142.mp3")
+      );
+
+      const { sound } = await Audio.Sound.createAsync(asset);
       setSound(sound);
-  
-      console.log('Playing Sound');
+
+      console.log("Playing Sound");
       await sound.playAsync();
     } catch (error) {
-      console.log(error)
+      console.log(error);
     }
   }
 
   useEffect(() => {
+    if (settings) {
+      timer.current = new Timer(onFinish, setRounds, setPlayingTime, settings);
+      timer.current.state = "loaded";
+    }
+
+    return () => {
+      if (timer.current) {
+        timer.current.close();
+      }
+    };
+  }, [settings]);
+
+  useEffect(() => {
+    roundsRef.current = rounds;
+  }, [rounds]);
+
+  useEffect(() => {
     return sound
       ? () => {
-          console.log('Unloading Sound');
+          console.log("Unloading Sound");
           sound.unloadAsync();
         }
       : undefined;
   }, [sound]);
 
-  const pauseTimer = () => {
-    const round = rounds - 1
+  const onSubmit = (settings: TimerSettings) => {
+    setPlayingTime(settings.round);
+    setSettings(settings);
+    setIsOpen(false);
+  };
 
-    setRounds(round)
+  const setMinutes = (minutes: number) => {
+    const secondsInCurrentTime = playingTime % 60;
+    const minutesInCurrentTime = playingTime / 60;
 
-    console.log(round, rounds)
-
-    if (settings) {
-      if (round > 0) {
-        if (settings.rest) {
-          setTimeout(() => {
-            setPlayingTime(settings.rest as number)
-            onStart()
-          }, settings.rest)
-        } else {
-          setPlayingTime(settings.round)
-          onStart()
-        }
-      } else {
-        setIsNeedConfirm(true)
-        setStarted(false)
-        setPlayingTime(settings.round)
-        deactivateKeepAwake()
-        clearInterval(inRef.current)
-      }
+    if (minutesInCurrentTime > 1) {
+      setPlayingTime(secondsInCurrentTime + minutes * 60);
+    } else {
+      setPlayingTime((value) => value + minutes * 60);
     }
-    
-    console.log('stop')
-  }
+  };
 
-  const onWait = () => {
-    if (settings) {
-      setPlayingTime(settings.wait as number)
-      // setEndTime(settings.wait as number)
-      setIsWaiting(true)
-  
-      inRef.current = window.setInterval(() => setPlayingTime(time => time - 150), 150)
-      timeRef.current = window.setTimeout(() => {
-        setPlayingTime(0)
-        setIsWaiting(false)
-        clearInterval(inRef.current)
-        setTimeout(() => {
-          onStart()
-        }, 100)
-      }, settings.wait)
-    }
-  }
+  const setSeconds = (seconds: number) => {
+    const minutesInCurrentTime = Math.floor(playingTime / 60);
 
-  const onStart = () => {
-    if (settings) {
-      setStarted(true)
-      setPlayingTime(settings.round)
-      // setEndTime(roundTime)
-      activateKeepAwakeAsync()
-  
-      console.log('Start', settings.round)
-  
-      inRef.current = window.setInterval(() => setPlayingTime(time => time - 150), 150)
-      timeRef.current = window.setTimeout(pauseTimer, settings.round)
-    }
-  }
-
-  const onContinue = (pause: number) => {
-    if (settings) {
-
-      setPaused(false)
-
-      inRef.current = window.setInterval(() => setPlayingTime(time => time - 150), 150)
-      timeRef.current = window.setTimeout(pauseTimer, settings.round - pause)
-    }
-  }
+    setPlayingTime(60 * minutesInCurrentTime + seconds);
+  };
 
   const onPause = () => {
-    setPaused(true)
-    clearTimeout(timeRef.current)
-    clearInterval(inRef.current)
-  }
-
-  const onStop = () => {
-    setPlayingTime(0)
-    setStarted(false)
-    clearTimeout(timeRef.current)
-    clearInterval(inRef.current)
-  }
-
-  const formatTime = (number: number) => {
-    if (number > 9) {
-      return number.toString()
+    if (timer.current) {
+      timer.current.pause();
     }
 
-    return `0${number}`
+    timeToStart.current = Date.now() - timeMark.current
+
+    setPaused(true);
+  };
+
+  const onStop = () => {
+    if (settings) {
+      setPlayingTime(settings?.round)
+    }
+
+    if (timer.current) {
+      timer.current.stop()
+    }
+
+
+    timeToStart.current = 0
+    timeMark.current = 0
+
+    setStarted(false)
+    setPaused(false)
   }
 
-  const onSubmit = (settings: TimerSettings) => {
-    setPlayingTime(settings.round)
-    setSettings(settings)
-    setIsOpen(false)
+  const onConfirm = () => {
+    setPlayingTime(settings?.round!);
+    setIsNeedConfirm(false);
+
+    cancelAnimation(grown);
+    cancelAnimation(progress);
+
+    grown.value = withTiming(1, { duration: 200 });
+    progress.value = withTiming(0, { duration: 200 });
+
+    deactivateKeepAwake();
+  };
+
+  const onPlayingStart = () => {
+    activateKeepAwakeAsync();
+
+    if (settings) {
+      const { round, wait } = settings;
+      let countdown = wait ? wait : round;
+
+      setPlayingTime(wait ? wait : round);
+      setStarted(true);
+
+      timeMark.current = Date.now()
+
+      if (timer.current) {
+        timer.current.state = settings.wait ? "waiting" : "playing";
+        timer.current.rounds = wait ? 1 : settings.count;
+        timer.current.start(countdown);
+      }
+    }
+  };
+
+  const onContinue = () => {
+    let countdown = 0
+
+    if (settings) {
+      const { round } = settings;
+      
+      countdown = round - Math.floor(timeToStart.current / 1000)
+    }
+
+    setPaused(false)
+
+    if (timer.current) {
+      timer.current.start(countdown);
+    }
   }
 
-  const formatText = () => {
-    const seconds = Math.floor(playingTime / 1000) % 60
-    const minutes = Math.floor(playingTime / 1000 / 60) % 60
+  const onFinish = () => {
+    if (settings && timer.current && timer.current.state === "waiting") {
+      timer.current.rounds = rounds;
+      timer.current.state = "playing";
+      timer.current.start(settings.round);
+    } else {
+      if (isSoundEnabled) {
+        playSound()
+      }
 
-    return `${formatTime(minutes)}:${formatTime(seconds)}`
-  }
+      setStarted(false);
+      setIsNeedConfirm(true);
+
+      timeToStart.current = 0
+      timeMark.current = 0
+
+      progress.value = withRepeat(
+        withTiming(1 - progress.value, { duration: 600 }),
+        -1,
+        true
+      );
+      grown.value = withRepeat(
+        withTiming(1.6, { easing: Easing.bounce, duration: 250 }),
+        -1,
+        true
+      );
+    }
+  };
+
+  const onClose = () => {
+    setSettings({ round: playingTime });
+
+    setShowActionsheet(false);
+  };
+
+  const onSecondsSubmit = (seconds: number) => {
+    setPlayingTime((value) => value + seconds);
+    setIsSecondsOpen(false);
+    setIsMinutesOpen(false);
+  };
+
+  const onMinutesSubmit = (minutes: number) => {
+    if (minutes) {
+      setPlayingTime(minutes * 60);
+    }
+
+    setIsMinutesOpen(false);
+    setIsSecondsOpen(true);
+  };
+
+  const toggleSound = () => {};
+
+  const reset = () => {
+    if (timer.current) {
+      timer.current.reset();
+    }
+
+    setPlayingTime(0);
+    setStarted(false);
+    setPaused(false);
+    setRounds(1);
+  };
+
+  const DISPLAY_SIZE = useMemo(() => width * 0.8, [width]);
+
+  const { minutes, seconds } = getSplittedTime(playingTime);
+
+  const progress = useSharedValue(0);
+  const grown = useSharedValue(1);
+
+  const animatedSizeStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: grown.value }],
+  }));
+
+  const animatedColorStyle = useAnimatedStyle(() => {
+    return {
+      backgroundColor: interpolateColor(
+        progress.value,
+        [0, 1],
+        [config.tokens.colors.backgroundDark900, config.tokens.colors.red700]
+      ),
+    };
+  });
+
+
+  const backgroundColor = started
+    ? config.tokens.colors.green600
+    : config.tokens.colors.backgroundDark900;
 
   return (
-    <View style={styles.container}>
-      <TimerModal isOpen={isOpen} settings={settings} onClose={() => setIsOpen(false)} onSubmit={onSubmit}/>
+    <Animated.View
+      style={[styles.container, animatedColorStyle, { backgroundColor }]}
+    >
+      <SettingsModal
+        isOpen={isOpen}
+        settings={settings}
+        onClose={() => setIsOpen(false)}
+        onSubmit={onSubmit}
+      />
+
+      {/* <Box style={styles.debug}>
+        <Button onPress={reset}>
+          <ButtonText>Rest</ButtonText>
+        </Button>
+        <Button
+          onPress={() => onSubmit({ count: 2, round: 6, wait: 0, rest: 0 })}
+        >
+          <ButtonText>Debug</ButtonText>
+        </Button>
+      </Box> */}
 
       <Box style={styles.open}>
-        <Button ref={modal} onPress={() => setIsOpen(true)} />
+        <Button variant="link" ref={modal} onPress={() => setIsOpen(true)}>
+          <ButtonIcon color="grey" size={32} name="gear" as={FontAwesome} />
+        </Button>
       </Box>
 
-      <Center>
-        <Text>Rounds</Text>
-        <Count min={1} onChange={setRounds} />
-      </Center>
+      {/* <Center>
+        <Count min={1} onChange={updateSettings} />
+      </Center> */}
 
       <Box style={styles.sound}>
-        <Button title="Play Sound" onPress={playSound} />
+        <Button
+          variant="link"
+          onPress={() => setIsSoundEnabled(!isSoundEnabled)}
+        >
+          <ButtonIcon
+            color="grey"
+            size={32}
+            marginRight={isSoundEnabled ? undefined : "$4"}
+            name={isSoundEnabled ? "volume-up" : "volume-off"}
+            as={FontAwesome}
+          />
+        </Button>
       </Box>
 
-      <Text paddingBottom={10} size="2xl">Round: {rounds}</Text>
+      <Text
+        position="absolute"
+        top="$16"
+        color="#fff"
+        paddingBottom={10}
+        size="5xl"
+      >
+        {settings?.count ? `Round: ${rounds} / ${settings.count}` : `Round: 1`}
+      </Text>
 
-      <Box paddingBottom={20}>
-        <Progress.Circle
-          showsText
-          size={280}
-          direction="counter-clockwise"
-          textStyle={{ fontSize: 90 }}
-          thickness={isWaiting ? 0 : 9}
-          formatText={formatText}
-          progress={settings ? playingTime / settings.round : 0}
-        />
-      </Box>
+      <CircularProgress
+        size={DISPLAY_SIZE}
+        strokeWidth={18}
+        maxValue={settings?.round}
+        currentValue={playingTime}
+      />
 
-      <HStack space="lg" reversed={false}>
-        {!started && !isNeedConfirm && <Button isDisabled={!settings} title="Start" onPress={settings?.wait ? onWait : onStart} />}
-        {started && !paused && <Button title="Pause" onPress={onPause} />}
-        {started && paused && <Button title="Continue" onPress={() => onContinue(playingTime)} />}
-        {started && <Button title="Stop" onPress={onStop} />}
-        {isNeedConfirm && <Button title="OK" onPress={() => setIsNeedConfirm(false)} />}
+      <Text>{playingTime}</Text>
+
+      <HStack
+        position="absolute"
+        bottom="$12"
+        marginTop="$32"
+        space="lg"
+        reversed={false}
+      >
+        {(!started || paused) && (
+          <PlayerButton
+            name="play"
+            isDisabled={playingTime === 0}
+            iconStyle={{ marginLeft: "$1.5" }}
+            onPress={paused ? onContinue : onPlayingStart}
+          />
+        )}
+        {isNeedConfirm && (
+          <Animated.View style={[styles.box, animatedSizeStyle]}>
+            <PlayerButton
+              name="check"
+              onPress={onConfirm}
+            />
+          </Animated.View>
+        )}
+        {!started && (
+          <PlayerButton
+            name="external-link-square"
+            iconStyle={{ marginLeft: "$0.1" }}
+            onPress={() => setShowActionsheet(!showActionsheet)}
+          />
+        )}
+        {(started && !paused) && <PlayerButton name="pause" onPress={onPause} />}
+        {started && <PlayerButton name="stop" onPress={onStop} />}
       </HStack>
 
+      {isMinutesOpen && (
+        <TimerButtons
+          icon={ChevronRightIcon}
+          data={[1, 3, 5, 10]}
+          pre="min"
+          onClick={onMinutesSubmit}
+        />
+      )}
+      {isSecondsOpen && (
+        <TimerButtons
+          icon={playingTime ? CheckIcon : EditIcon}
+          data={[10, 30, 40, 50]}
+          pre="sec"
+          onClick={onSecondsSubmit}
+        />
+      )}
+
+      <TimerModal
+        isOpen={showActionsheet}
+        onClose={onClose}
+        minutes={minutes}
+        seconds={seconds}
+        onSecondsChange={setSeconds}
+        onMinutesChange={setMinutes}
+      />
+
       <StatusBar style="auto" />
-    </View>
+    </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
+    position: "relative",
+  },
+  debug: {
+    top: 15,
+    left: 95,
+    display: "flex",
+    position: "absolute",
   },
   open: {
     top: 15,
     left: 15,
-    position: 'absolute'
+    position: "absolute",
   },
   sound: {
     top: 15,
     right: 15,
-    position: 'absolute'
-  },
-  item: {
-    backgroundColor: '#f9c2ff',
-    padding: 20,
-    marginVertical: 8,
-  },
-  header: {
-    fontSize: 32,
-    backgroundColor: '#fff',
+    position: "absolute",
   },
   title: {
     fontSize: 24,
+  },
+  box: {
+    position: "absolute",
+    borderRadius: 500,
+    width: config.tokens.space[16],
+    height: config.tokens.space[16],
+    backgroundColor: config.tokens.colors["indigo600"],
   },
 });

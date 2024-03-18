@@ -1,0 +1,1 @@
+export const getSplittedTime = (time: number) => ({ seconds: time % 60, minutes: Math.floor(time / 60) })

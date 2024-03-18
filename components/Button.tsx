@@ -7,6 +7,7 @@ interface UIButton extends ButtonProps {
   action?: "primary" | "secondary" | "positive" | "negative" | "default" | undefined
   size?: "xs" | "sm" | "md" | "lg" | "xl" | undefined
   variant?: "link" | "solid" | "outline" | undefined
+  children?: any
 }
 
 
@@ -18,5 +19,6 @@ export default function UIButton(props: UIButton) {
   {...props}
 >
   <ButtonText>{props.title}</ButtonText>
+  {props.children}
 </Button>
 }

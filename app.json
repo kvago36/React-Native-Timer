@@ -5,7 +5,9 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "packagerOpts": {
-      "sourceExts": [ "mp3"]
+      "sourceExts": [
+        "mp3"
+      ]
     },
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -24,10 +26,16 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
-      }
+      },
+      "package": "com.kvago36.myapp"
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "88c50c79-263c-4d0b-b3f9-3d8a15684ed3"
+      }
     }
   }
 }
