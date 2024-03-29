@@ -17,7 +17,7 @@ import {
   useFont, 
 } from '@shopify/react-native-skia'
 
-import { getSplittedTime } from '../utils'
+import { getSplittedTime, getFormatedTime } from '../utils'
 
 const fontSize = 98
 const fontFamily = Platform.select({ android: "sans-serif", ios: "Helvetica", default: "serif" });
@@ -69,12 +69,8 @@ const CircularProgress: React.FC<CircularProgressProps> = ({
     }
   })
 
-  const formatTime = (minutes: number, seconds: number): string => {
-    return `${minutes > 9 ? minutes : `0${minutes}`}:${seconds > 9 ? seconds : `0${seconds}` }`
-  }
-
   const { minutes, seconds } = getSplittedTime(Math.ceil(currentValue))
-  const timeString = formatTime(minutes, seconds)
+  const timeString = getFormatedTime(minutes, seconds)
 
   const x = useComputedValue(() => mix(animatedProgress.current, 0, 180), [animatedProgress])
   const progress = useComputedValue(() => x.current / 180, [x])

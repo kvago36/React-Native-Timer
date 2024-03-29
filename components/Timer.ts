@@ -10,7 +10,7 @@ export class Timer {
   private timerId: ReturnType<typeof setTimeout>;
   private intervalId: ReturnType<typeof setInterval>;
   private settings: TimerSettings
-  private startTime: number = 0
+  // private startTime: number = 0
 
   private onFinish: () => void
   private onRoundEnd: (value: number) => void
@@ -32,8 +32,6 @@ export class Timer {
     this.countdown = countdown
     this.startTime = Date.now()
 
-    // this.onPlaying(countdown)
-
     this.intervalId = setInterval(() => {
       this.onPlaying(this.countdown -= 1)
     }, 1000)
@@ -42,12 +40,7 @@ export class Timer {
   }
 
   pause() {
-    // this.countdown = this.settings.round - (Date.now() - this.startTime) / 1000
-
-    // console.log(this.countdown)
-
     this.clearTimers()
-    // return this.countdown
   }
 
   stop() {
@@ -76,8 +69,6 @@ export class Timer {
 
     clearInterval(this.intervalId)
     this.onPlaying(0)
-
-    // console.log(this.current, this.rounds, 'rounds')
 
     if (this.current <= this.rounds) {
       let countdown = this.settings.round

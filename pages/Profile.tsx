@@ -1,147 +1,174 @@
-import { useState } from "react";
-import { SafeAreaView } from "react-native";
+import { useState, useEffect, useRef } from "react";
+import { StyleSheet } from "react-native";
 import {
   Text,
   VStack,
-  HStack,
-  FormControl,
-  AlertCircleIcon,
-  FormControlError,
-  FormControlErrorIcon,
-  FormControlErrorText,
-  FormControlHelper,
-  FormControlHelperText,
-  FormControlLabel,
-  FormControlLabelText,
-  Textarea,
-  TextareaInput,
-  ChevronDownIcon,
+  Center,
   Heading,
-  Icon,
-  Switch,
-  Select,
-  SelectBackdrop,
-  SelectContent,
-  SelectDragIndicator,
-  SelectDragIndicatorWrapper,
-  SelectIcon,
-  SelectInput,
-  SelectItem,
-  SelectPortal,
-  SelectTrigger,
-  Slider,
-  SliderFilledTrack,
-  SliderThumb,
-  SliderTrack,
+  HStack,
+  Pressable,
+  SafeAreaView,
+  Button,
+  ButtonText,
+  ButtonIcon,
+  ArrowRightIcon
 } from "@gluestack-ui/themed";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useForm, Controller } from "react-hook-form";
-import { yupResolver } from "@hookform/resolvers/yup";
-import * as yup from "yup";
 
-import Input from "../components/Input";
-import Checkbox from "../components/Checkbox";
-import Button from "../components/Button";
+import { config } from "../gluestack-style.config";
 
-const schema = yup
-  .object({
-    rest: yup.number().positive().integer(),
-    signal: yup.number().positive().integer(),
-    count: yup.number().positive().integer().required(),
-    duration: yup.number().positive().integer().required(),
-  })
+import ProfileModal from '../view/ProfileModal'
+
+import { TimerSettings, ProfileNames } from "../types";
+
+import { TIMER_SETTINGS, PROFILES } from '../constants'
+
+import { getTimerData } from "../utils/";
+
+const PROFILES_NAMES = ["box", "mma", "custom"] as const;
 
 export default function Settings({ navigation }) {
-  const [y, setY] = useState(false);
-  const [x, setX] = useState(false);
-  const {
-    control,
-    handleSubmit,
-    formState: { errors },
-  } = useForm({
-    resolver: yupResolver(schema),
-    defaultValues: {
-      duration: 0,
-      count: 0,
-      rest: 0,
-      signal: 0,
-    },
-  });
+  const [profile, setProfile] = useState<ProfileNames>();
+  const [settings, setSettings] = useState<TimerSettings>();
+  const [showAlertDialog, setShowAlertDialog] = useState(false);
+  const timerDataRef = useRef<TimerSettings>();
 
-  const readData = async (keys: string[]) => {
-    try {
-    return await AsyncStorage.multiGet(keys)
-    } catch (e) {
-      // saving error
+  useEffect(() => {
+    const getProfile = async () => {
+      try {
+        const saved: ProfileNames | null = (await AsyncStorage.getItem(
+          "profile"
+        )) as ProfileNames;
+
+        if (saved) {
+          setProfile(saved);
+        } else {
+          // load from storage current settings
+          setProfile("custom");
+        }
+      } catch (e) {
+        // read error
+      }
+
+      console.log("Done.");
+    };
+
+    getProfile();
+  }, []);
+
+  useEffect(() => {
+    const loadData = async () => {
+      const timerData = await getTimerData();
+      const isValid = (value: string | null) =>
+        value && Number.isInteger(+value);
+
+      console.log(timerData);
+
+      if (timerData && Object.values(timerData).every(isValid)) {
+        timerDataRef.current = timerData;
+        setShowAlertDialog(true);
+      } else {
+        setSettings(PROFILES.custom);
+      }
+    };
+
+    if (profile === "custom") {
+      if (!timerDataRef.current) {
+        loadData();
+      } else {
+        setSettings(timerDataRef.current)
+      }
+    } else if (profile) {
+      setSettings(PROFILES[profile]);
     }
-  };
-
-  const storeData = async (data) => {
-    try {
-    await AsyncStorage.multiSet(Object.entries(data))
-    } catch (e) {
-      // saving error
-    }
-  };
-
-  const onSubmit = (data) => {
-    // storeData(data)
-    storeData(data)
-    console.log(data);
-  };
+  }, [profile]);
 
   return (
-    <SafeAreaView>
+    <SafeAreaView style={styles.container}>
       <VStack space="xs" mb="$4">
-        <Heading>Change Settings</Heading>
-        <Text size="sm">Make modifications to the settings with ease.</Text>
+        <Heading>Select profile</Heading>
+        <Text size="sm">You can select predifined timer settings like rounds count or duration on the round</Text>
       </VStack>
-      <VStack py="$2" space="xl">
-        <FormControl>
-          <FormControlLabel>
-            <FormControlLabelText>Volume</FormControlLabelText>
-          </FormControlLabel>
-          <Slider defaultValue={60} sliderTrackHeight={4}>
-            <SliderTrack>
-              <SliderFilledTrack />
-            </SliderTrack>
-            <SliderThumb />
-          </Slider>
-        </FormControl>
-        <FormControl>
-          <HStack space="sm">
-            <Switch size="sm" />
-            <FormControlLabelText>Vibrations</FormControlLabelText>
-          </HStack>
-        </FormControl>
-        <FormControl>
-          <HStack space="sm">
-            <Switch size="sm" />
-            <FormControlLabelText>Orientaion</FormControlLabelText>
-          </HStack>
-        </FormControl>
-        <FormControl>
-          <Select defaultValue="en">
-            <SelectTrigger>
-              <SelectInput placeholder="Language" />
-              <SelectIcon mr="$3">
-                <Icon as={ChevronDownIcon} />
-              </SelectIcon>
-            </SelectTrigger>
-            <SelectPortal>
-              <SelectBackdrop />
-              <SelectContent>
-                <SelectDragIndicatorWrapper>
-                  <SelectDragIndicator />
-                </SelectDragIndicatorWrapper>
-                <SelectItem label="English" value="en" />
-                <SelectItem label="Русский" value="ru" />
-              </SelectContent>
-            </SelectPortal>
-          </Select>
-        </FormControl>
-      </VStack>
-      <Button mt="$4" title="Save Changes" onPress={() => {}} />
+      {/* <Button onPress={() => setShowAlertDialog(true)}>
+        <ButtonText>Click me</ButtonText>
+      </Button> */}
+      <HStack justifyContent="center" space="lg">
+        {PROFILES_NAMES.map((name) => (
+          <Pressable key={name} onPress={() => setProfile(name)}>
+            <Center
+              style={[
+                styles.box,
+                {
+                  backgroundColor:
+                    profile === name
+                      ? config.tokens.colors.primary600
+                      : "transparent",
+                },
+              ]}
+              paddingVertical="$2"
+              paddingHorizontal="$5"
+            >
+              <Text
+                style={[
+                  styles.label,
+                  {
+                    color:
+                      profile !== name
+                        ? config.tokens.colors.primary600
+                        : "#fff",
+                  },
+                ]}
+              >
+                {name}
+              </Text>
+            </Center>
+          </Pressable>
+        ))}
+      </HStack>
+      {settings && (
+        <VStack space="md">
+          {TIMER_SETTINGS.map((prop) => (
+            <HStack justifyContent="space-between" key={prop}>
+              <Text>{prop}</Text>
+              <Text>{settings[prop]}</Text>
+            </HStack>
+          ))}
+        </VStack>
+      )}
+      <Button onPress={() => navigation.navigate('Timer')} variant="link">
+        <ButtonText size="xl">Open timer</ButtonText>
+        <ButtonIcon
+          as={ArrowRightIcon}
+          h="$6"
+          w="$6"
+          color="$primary600"
+          ml="$1"
+        />
+      </Button>
+      <ProfileModal
+        isOpen={showAlertDialog}
+        onClose={() => setShowAlertDialog(false)}
+        onSubmit={() => setSettings(timerDataRef.current)}
+      />
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  box: {
+    color: config.tokens.colors.primary600,
+    borderWidth: 2,
+    borderRadius: 2,
+    borderColor: config.tokens.colors.primary600,
+  },
+  selected_box: {
+    backgroundColor: config.tokens.colors.primary600,
+  },
+  label: {
+    fontWeight: "600",
+    color: config.tokens.colors.primary600,
+  },
+});

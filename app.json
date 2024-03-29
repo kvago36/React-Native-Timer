@@ -20,6 +20,9 @@
       "**/*"
     ],
     "ios": {
+      "infoPlist": {
+        "UIBackgroundModes": ["audio"]
+      },
       "supportsTablet": true
     },
     "android": {
@@ -27,15 +30,29 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
+      "permissions": ["WAKE_LOCK"],
       "package": "com.kvago36.myapp"
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "extra": {
+      "plugins": [
+        [
+          "expo-font",
+          {
+            "fonts": [
+              "./assets/fonts/digital-7/digital-7.ttf"
+            ]
+          }
+        ]
+      ],
       "eas": {
         "projectId": "88c50c79-263c-4d0b-b3f9-3d8a15684ed3"
       }
-    }
+    },
+    "plugins": [
+      "expo-font"
+    ]
   }
 }

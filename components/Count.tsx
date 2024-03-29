@@ -1,55 +1,67 @@
 import {
-  VStack,
   HStack,
-  Box,
   Text,
   Button,
   ButtonIcon,
-  Center,
-  ChevronUpIcon,
-  ChevronDownIcon
 } from "@gluestack-ui/themed";
 import { useEffect, useState } from "react";
+import { FontAwesome } from "@expo/vector-icons";
 
 interface CountProps {
-  min?: number
-  max?: number
-  startValue?: number
-  onChange: (count: number) => void
+  min?: number;
+  max?: number;
+  value?: number;
+  startValue?: number;
+  onChange: (count: number) => void;
 }
 
-export default function Count({ startValue, min = 0, max = 20, onChange }: CountProps) {
-  const [count, setCount] = useState(min ?? 0)
+export default function Count({ value, min = 0, max = 20, onChange }: CountProps) {
+  const [count, setCount] = useState(value ? value : min ?? 0);
 
   useEffect(() => {
     if (count !== null) {
-      onChange(count)
+      onChange(count);
     }
-  }, [count])
+  }, [count]);
 
   return (
-    <Box bg="$primary500" p="$1">
-      <HStack >
-        <Center w={40}>
-          <Text bold size="lg" color="white">{count}</Text>
-        </Center>
-        <VStack space="xs" reversed={false}>
+
+        <HStack alignItems="center" space="xs" reversed={false}>
           <Button
-            isDisabled={count === max}
-            onPress={() => setCount(value => value + 1)}
-            size="xs"
-          >
-            <ButtonIcon as={ChevronUpIcon} size="xl" />
-          </Button>
-          <Button
+            variant="link"
             isDisabled={count === min}
-            onPress={() => setCount(value => value - 1)}
+            onPress={() => setCount((value) => value - 1)}
             size="xs"
           >
-            <ButtonIcon as={ChevronDownIcon} size="xl" />
+            <ButtonIcon
+              name="minus-circle"
+              color="$primary500"
+              size="xl"
+              width="$6"
+              as={FontAwesome}
+            />
           </Button>
-        </VStack>
-      </HStack>
-    </Box>
+          <Text
+            textAlign="center"
+            width="$8"
+            size="2xl"
+          >
+            {count}
+          </Text>
+          <Button
+            variant="link"
+            isDisabled={count === max}
+            onPress={() => setCount((value) => value + 1)}
+            size="xs"
+          >
+            <ButtonIcon
+              width="$6"
+              name="plus-circle"
+              color="$primary500"
+              size="xl"
+              as={FontAwesome}
+            />
+          </Button>
+        </HStack>
   );
 }

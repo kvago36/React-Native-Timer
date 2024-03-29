@@ -1,0 +1,1 @@
+export const TIMER_SETTINGS = ['wait', 'rest', 'count', 'round'] as const 

@@ -1,29 +1,24 @@
-import { useState } from "react";
-import { SafeAreaView } from "react-native";
+import { useState, useEffect } from "react";
 import {
   Text,
   VStack,
   HStack,
   FormControl,
-  Heading,
   Switch,
-  AlertCircleIcon,
-  FormControlError,
-  FormControlErrorIcon,
-  FormControlErrorText,
+  Button,
+  ButtonText,
+  Pressable,
+  Box,
+  Spinner,
+  Progress,
   FormControlHelper,
   FormControlHelperText,
   FormControlLabel,
   FormControlLabelText,
-  Textarea,
-  TextareaInput,
-  InputField,
   ChevronDownIcon,
-  Slider,
+  CloseIcon,
   Icon,
-  SliderFilledTrack,
-  SliderThumb,
-  SliderTrack,
+  useToast,
   SelectItem,
   Select,
   SelectContent,
@@ -34,95 +29,182 @@ import {
   SelectInput,
   SelectTrigger,
   SelectPortal,
+  ProgressFilledTrack,
+  ButtonIcon,
+  Toast,
+  ToastDescription,
+  ToastTitle,
 } from "@gluestack-ui/themed";
+import { MaterialIcons } from "@expo/vector-icons";
+
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useForm, Controller } from "react-hook-form";
-import { yupResolver } from "@hookform/resolvers/yup";
-import * as yup from "yup";
 
-import Input from "../components/Input";
-import Checkbox from "../components/Checkbox";
-import Button from "../components/Button";
-
-const schema = yup.object({
-  rest: yup.number().positive().integer(),
-  signal: yup.number().positive().integer(),
-  count: yup.number().positive().integer().required(),
-  duration: yup.number().positive().integer().required(),
-});
+const SETTINGS = ["volume", "vibration", "language"] as const;
 
 export default function Settings({ navigation }) {
-  const [y, setY] = useState(false);
-  const [x, setX] = useState(false);
-  const {
-    control,
-    handleSubmit,
-    formState: { errors },
-  } = useForm({
-    resolver: yupResolver(schema),
-    defaultValues: {
-      duration: 0,
-      count: 0,
-      rest: 0,
-      signal: 0,
-    },
-  });
+  const [volume, setVolume] = useState(50);
+  const [vibration, setVibration] = useState(true);
+  const [lg, setLg] = useState("en");
+  const [isLoading, setIsloading] = useState(true);
+  const toast = useToast();
 
-  const readData = async (keys: string[]) => {
-    try {
-      return await AsyncStorage.multiGet(keys);
-    } catch (e) {
-      // saving error
-    }
-  };
 
-  const storeData = async (data) => {
-    try {
-      await AsyncStorage.multiSet(Object.entries(data));
-    } catch (e) {
-      // saving error
-    }
-  };
+  useEffect(() => {
+    (async function () {
+      const data = await AsyncStorage.multiGet(SETTINGS);
 
-  const onSubmit = (data) => {
-    // storeData(data)
-    // test commit
-    storeData(data);
-    console.log(data);
+      if (!data) {
+        setIsloading(false);
+      } else {
+        const settings = data.reduce(
+          (acc, [key, value]) => ({ ...acc, [key]: value }),
+          {}
+        );
+
+        console.log(settings);
+
+        setVolume(+settings.volume);
+        setVibration(settings.vibration === "enabled");
+        setLg(settings.language);
+        setIsloading(false);
+      }
+    })();
+  }, []);
+
+  const onConfirm = (id: number) => {
+    toast.close(id)
+    navigation.navigate('Timer')
+  }
+
+  const onSubmit = async () => {
+    const vibrationValue = vibration ? "enabled" : "disabled";
+    const keyValues: [string, string][] = [
+      ["volume", volume.toString()],
+      ["vibration", vibrationValue],
+      ["language", lg],
+    ];
+    await AsyncStorage.multiSet(keyValues);
+
+    toast.show({
+      placement: "bottom",
+      render: ({ id }) => (
+        <Toast bgColor="$success300" width="100%" nativeID={"toast-" + id} action="success">
+          <VStack space="xs">
+            <ToastTitle>Settings updated!</ToastTitle>
+            <ToastDescription>
+              <HStack space="xs" alignContent="center">
+                <Text>Go to</Text>
+                <Pressable onPress={() => onConfirm(id)}>
+                  <Text textDecorationLine="underline" color="$primary600">Timer</Text>
+                </Pressable>
+              </HStack>
+            </ToastDescription>
+          </VStack>
+          <Pressable top={5} right={5} position="absolute" mt="$1" onPress={() => toast.close(id)}>
+            <Icon as={CloseIcon} color="$coolGray50" />
+          </Pressable>
+        </Toast>
+      ),
+    });
   };
 
   return (
-    <SafeAreaView>
-      <VStack space="xs" mb="$4">
-        <Heading>Change Settings</Heading>
-        <Text size="sm">Make modifications to the settings with ease.</Text>
-      </VStack>
-      <VStack py="$2" space="xl">
+    <Box>
+      {isLoading && (
+        <Box
+          zIndex={4}
+          width="100%"
+          height="100%"
+          alignItems="center"
+          justifyContent="center"
+          position="absolute"
+        >
+          <Box
+            zIndex={10}
+            opacity={0.6}
+            backgroundColor="white"
+            width="100%"
+            height="100%"
+          />
+          <Spinner position="absolute" size="large" />
+        </Box>
+      )}
+      <VStack px="$6" py="$2" space="xl">
+        {/* <VStack>
+          <Heading>Change Settings</Heading>
+          <Text size="sm">Make modifications to the settings with ease.</Text>
+        </VStack> */}
         <FormControl>
           <FormControlLabel>
+            <Icon
+              mr="$1"
+              size="xl"
+              name={volume ? "volume-up" : "volume-mute"}
+              as={MaterialIcons}
+            />
             <FormControlLabelText>Volume</FormControlLabelText>
           </FormControlLabel>
-          <Slider defaultValue={60} sliderTrackHeight={4}>
-            <SliderTrack>
-              <SliderFilledTrack />
-            </SliderTrack>
-            <SliderThumb />
-          </Slider>
+          <HStack alignItems="center" space="md">
+            <Button
+              isDisabled={volume === 0}
+              onPress={() => setVolume((value) => value - 10)}
+              width={20}
+              height={30}
+            >
+              <ButtonIcon name="remove" as={MaterialIcons} />
+            </Button>
+            <Progress flex={1} value={volume} h="$1">
+              <ProgressFilledTrack h="$1" />
+            </Progress>
+            <Button
+              isDisabled={volume === 100}
+              onPress={() => setVolume((value) => value + 10)}
+              width={20}
+              height={30}
+            >
+              <ButtonIcon name="add" as={MaterialIcons} />
+            </Button>
+          </HStack>
+          <FormControlHelper>
+            <FormControlHelperText>
+              Must be at least 6 characters.
+            </FormControlHelperText>
+          </FormControlHelper>
         </FormControl>
         <FormControl>
           <HStack space="sm">
-            <Switch size="sm" />
+            <Icon
+              size="xl"
+              name={vibration ? "vibration" : "smartphone"}
+              as={MaterialIcons}
+            />
+            <Switch
+              onChange={() => setVibration((value) => !value)}
+              value={vibration}
+              size="lg"
+            />
             <FormControlLabelText>Vibrations</FormControlLabelText>
           </HStack>
+          <FormControlHelper>
+            <FormControlHelperText>
+              Must be at least 6 characters.
+            </FormControlHelperText>
+          </FormControlHelper>
         </FormControl>
-        <FormControl>
+        {/* <FormControl>
           <HStack space="sm">
-            <Switch size="sm" />
+            <Icon size="xl" name="volume-up" as={MaterialIcons} />
+            <Switch size="lg" />
             <FormControlLabelText>Orientaion</FormControlLabelText>
           </HStack>
-        </FormControl>
+          <FormControlHelper>
+            <FormControlHelperText>
+              Must be at least 6 characters.
+            </FormControlHelperText>
+          </FormControlHelper>
+        </FormControl> */}
         <FormControl>
-          <Select defaultValue="en">
+          <Select onValueChange={setLg}>
             <SelectTrigger>
               <SelectInput placeholder="Language" />
               <SelectIcon mr="$3">
@@ -141,8 +223,10 @@ export default function Settings({ navigation }) {
             </SelectPortal>
           </Select>
         </FormControl>
+        <Button size="lg" mt="$4" onPress={onSubmit}>
+          <ButtonText>Save Changes</ButtonText>
+        </Button>
       </VStack>
-      <Button mt="$4" title="Save Changes" onPress={() => {}} />
-    </SafeAreaView>
+    </Box>
   );
 }

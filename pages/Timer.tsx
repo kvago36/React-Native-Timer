@@ -2,17 +2,15 @@ import { StatusBar } from "expo-status-bar";
 import { useEffect, useState, useRef, useMemo } from "react";
 import { StyleSheet, useWindowDimensions } from "react-native";
 import { config } from "@gluestack-ui/config";
-import { Audio } from "expo-av";
+import { Audio, InterruptionModeAndroid, InterruptionModeIOS } from "expo-av";
 import { Asset } from "expo-asset";
+import * as Haptics from 'expo-haptics';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   Box,
   Button,
-  ChevronRightIcon,
-  EditIcon,
-  CheckIcon,
   HStack,
   Text,
-  View,
   ButtonIcon,
 } from "@gluestack-ui/themed";
 import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
@@ -24,23 +22,18 @@ import Animated, {
   useAnimatedStyle,
   interpolateColor,
   withRepeat,
-  withSequence,
   cancelAnimation,
 } from "react-native-reanimated";
 
-import Count from "../components/Count";
-import TimePicker from "../components/TimePicker";
 import SettingsModal from "../view/SettingModal";
 import TimerModal from "../view/TimerModal";
 import CircularProgress from "../components/CircularProgress";
 import PlayerButton from "../components/PlayerButton";
-
 import { Timer } from "../components/Timer";
-
-import TimerButtons from "../view/TimerButtons";
 
 import { TimerSettings } from "../types";
 import { getSplittedTime } from "../utils";
+import { TIMER_SETTINGS } from '../constants'
 
 export default function TimerPage() {
   const [started, setStarted] = useState(false);
@@ -50,9 +43,6 @@ export default function TimerPage() {
   const { width } = useWindowDimensions();
 
   const [showActionsheet, setShowActionsheet] = useState(false);
-
-  const [isSecondsOpen, setIsSecondsOpen] = useState(false);
-  const [isMinutesOpen, setIsMinutesOpen] = useState(false);
 
   const [isSoundEnabled, setIsSoundEnabled] = useState(true);
 
@@ -67,12 +57,14 @@ export default function TimerPage() {
   const modal = useRef(false);
   const roundsRef = useRef(0);
 
-  const timeToStart = useRef(0)
-  const timeMark = useRef(0)
+  const timeToStart = useRef(0);
+  const timeMark = useRef(0);
+
+  const vibrationRef = useRef<ReturnType<typeof setInterval>>()
 
   const [isOpen, setIsOpen] = useState(false);
 
-  const [sound, setSound] = useState();
+  const [sound, setSound] = useState<Audio.Sound>();
 
   async function playSound() {
     console.log("Loading Sound");
@@ -82,6 +74,9 @@ export default function TimerPage() {
       );
 
       const { sound } = await Audio.Sound.createAsync(asset);
+      await sound.setVolumeAsync(1)
+      await sound.setIsLoopingAsync(true)
+
       setSound(sound);
 
       console.log("Playing Sound");
@@ -90,6 +85,24 @@ export default function TimerPage() {
       console.log(error);
     }
   }
+
+  useEffect(() => {
+    const loadData = async () => {
+      const saved = await getData() as TimerSettings
+
+      for (let p in saved) {
+        saved[p as keyof TimerSettings] = +saved[p as keyof TimerSettings]
+      }
+
+      if (saved.round) {
+        setPlayingTime(saved.round)
+      }
+
+      setSettings(saved)
+    }
+
+    loadData()
+  }, [])
 
   useEffect(() => {
     if (settings) {
@@ -109,6 +122,14 @@ export default function TimerPage() {
   }, [rounds]);
 
   useEffect(() => {
+    Audio.setAudioModeAsync({
+      staysActiveInBackground: true,
+      playsInSilentModeIOS: true,
+      interruptionModeIOS: InterruptionModeIOS.DuckOthers,
+      interruptionModeAndroid: InterruptionModeAndroid.DuckOthers,
+      shouldDuckAndroid: true,
+      playThroughEarpieceAndroid: true,
+    });
     return sound
       ? () => {
           console.log("Unloading Sound");
@@ -117,8 +138,34 @@ export default function TimerPage() {
       : undefined;
   }, [sound]);
 
+  const getData = async () => {
+    try {
+      const jsonValue = await AsyncStorage.multiGet(TIMER_SETTINGS)
+
+      return jsonValue.reduce((acc, [key, value]) => ({ ...acc, [key]: value }), {})
+    } catch (error) {
+      console.log(error)
+    }
+  }
+
+  const saveData = async (data: Partial<TimerSettings>) => {
+    const keyValuePair: [string, string][] = []
+
+    for (let p in data) {
+      const value = data[p as keyof TimerSettings]!
+      keyValuePair.push([p, value.toString()])
+    }
+
+    try {
+      await AsyncStorage.multiSet(keyValuePair)
+    } catch (error) {
+      console.log(error)
+    }
+  }
+
   const onSubmit = (settings: TimerSettings) => {
-    setPlayingTime(settings.round);
+    saveData(settings)
+    // setPlayingTime(settings.round);
     setSettings(settings);
     setIsOpen(false);
   };
@@ -145,27 +192,26 @@ export default function TimerPage() {
       timer.current.pause();
     }
 
-    timeToStart.current = Date.now() - timeMark.current
+    timeToStart.current = Date.now() - timeMark.current;
 
     setPaused(true);
   };
 
   const onStop = () => {
     if (settings) {
-      setPlayingTime(settings?.round)
+      setPlayingTime(settings?.round);
     }
 
     if (timer.current) {
-      timer.current.stop()
+      timer.current.stop();
     }
 
+    timeToStart.current = 0;
+    timeMark.current = 0;
 
-    timeToStart.current = 0
-    timeMark.current = 0
-
-    setStarted(false)
-    setPaused(false)
-  }
+    setStarted(false);
+    setPaused(false);
+  };
 
   const onConfirm = () => {
     setPlayingTime(settings?.round!);
@@ -173,6 +219,12 @@ export default function TimerPage() {
 
     cancelAnimation(grown);
     cancelAnimation(progress);
+
+    if (sound) {
+      sound.stopAsync();
+    }
+
+    clearInterval(vibrationRef.current)
 
     grown.value = withTiming(1, { duration: 200 });
     progress.value = withTiming(0, { duration: 200 });
@@ -190,7 +242,7 @@ export default function TimerPage() {
       setPlayingTime(wait ? wait : round);
       setStarted(true);
 
-      timeMark.current = Date.now()
+      timeMark.current = Date.now();
 
       if (timer.current) {
         timer.current.state = settings.wait ? "waiting" : "playing";
@@ -201,20 +253,20 @@ export default function TimerPage() {
   };
 
   const onContinue = () => {
-    let countdown = 0
+    let countdown = 0;
 
     if (settings) {
       const { round } = settings;
-      
-      countdown = round - Math.floor(timeToStart.current / 1000)
+
+      countdown = round - Math.floor(timeToStart.current / 1000);
     }
 
-    setPaused(false)
+    setPaused(false);
 
     if (timer.current) {
       timer.current.start(countdown);
     }
-  }
+  };
 
   const onFinish = () => {
     if (settings && timer.current && timer.current.state === "waiting") {
@@ -223,14 +275,18 @@ export default function TimerPage() {
       timer.current.start(settings.round);
     } else {
       if (isSoundEnabled) {
-        playSound()
+        playSound();
+      }
+
+      if (isSoundEnabled) {
+        vibrate()
       }
 
       setStarted(false);
       setIsNeedConfirm(true);
 
-      timeToStart.current = 0
-      timeMark.current = 0
+      timeToStart.current = 0;
+      timeMark.current = 0;
 
       progress.value = withRepeat(
         withTiming(1 - progress.value, { duration: 600 }),
@@ -246,38 +302,29 @@ export default function TimerPage() {
   };
 
   const onClose = () => {
-    setSettings({ round: playingTime });
-
+    saveData({ round: playingTime })
+    setSettings({ ...settings!, round: playingTime });
     setShowActionsheet(false);
   };
 
-  const onSecondsSubmit = (seconds: number) => {
-    setPlayingTime((value) => value + seconds);
-    setIsSecondsOpen(false);
-    setIsMinutesOpen(false);
-  };
+  const vibrate = () => {
+    vibrationRef.current = setInterval(() => {
+      Haptics.impactAsync(
+        Haptics.ImpactFeedbackStyle.Heavy
+      )
+    }, 350)
+  }
 
-  const onMinutesSubmit = (minutes: number) => {
-    if (minutes) {
-      setPlayingTime(minutes * 60);
-    }
+  // const reset = () => {
+  //   if (timer.current) {
+  //     timer.current.reset();
+  //   }
 
-    setIsMinutesOpen(false);
-    setIsSecondsOpen(true);
-  };
-
-  const toggleSound = () => {};
-
-  const reset = () => {
-    if (timer.current) {
-      timer.current.reset();
-    }
-
-    setPlayingTime(0);
-    setStarted(false);
-    setPaused(false);
-    setRounds(1);
-  };
+  //   setPlayingTime(0);
+  //   setStarted(false);
+  //   setPaused(false);
+  //   setRounds(1);
+  // };
 
   const DISPLAY_SIZE = useMemo(() => width * 0.8, [width]);
 
@@ -300,7 +347,6 @@ export default function TimerPage() {
     };
   });
 
-
   const backgroundColor = started
     ? config.tokens.colors.green600
     : config.tokens.colors.backgroundDark900;
@@ -316,26 +362,11 @@ export default function TimerPage() {
         onSubmit={onSubmit}
       />
 
-      {/* <Box style={styles.debug}>
-        <Button onPress={reset}>
-          <ButtonText>Rest</ButtonText>
-        </Button>
-        <Button
-          onPress={() => onSubmit({ count: 2, round: 6, wait: 0, rest: 0 })}
-        >
-          <ButtonText>Debug</ButtonText>
-        </Button>
-      </Box> */}
-
       <Box style={styles.open}>
         <Button variant="link" ref={modal} onPress={() => setIsOpen(true)}>
           <ButtonIcon color="grey" size={32} name="gear" as={FontAwesome} />
         </Button>
       </Box>
-
-      {/* <Center>
-        <Count min={1} onChange={updateSettings} />
-      </Center> */}
 
       <Box style={styles.sound}>
         <Button
@@ -369,8 +400,6 @@ export default function TimerPage() {
         currentValue={playingTime}
       />
 
-      <Text>{playingTime}</Text>
-
       <HStack
         position="absolute"
         bottom="$12"
@@ -388,39 +417,19 @@ export default function TimerPage() {
         )}
         {isNeedConfirm && (
           <Animated.View style={[styles.box, animatedSizeStyle]}>
-            <PlayerButton
-              name="check"
-              onPress={onConfirm}
-            />
+            <PlayerButton name="check" onPress={onConfirm} />
           </Animated.View>
         )}
-        {!started && (
+        {!started && !isNeedConfirm && (
           <PlayerButton
             name="external-link-square"
             iconStyle={{ marginLeft: "$0.1" }}
             onPress={() => setShowActionsheet(!showActionsheet)}
           />
         )}
-        {(started && !paused) && <PlayerButton name="pause" onPress={onPause} />}
+        {started && !paused && <PlayerButton name="pause" onPress={onPause} />}
         {started && <PlayerButton name="stop" onPress={onStop} />}
       </HStack>
-
-      {isMinutesOpen && (
-        <TimerButtons
-          icon={ChevronRightIcon}
-          data={[1, 3, 5, 10]}
-          pre="min"
-          onClick={onMinutesSubmit}
-        />
-      )}
-      {isSecondsOpen && (
-        <TimerButtons
-          icon={playingTime ? CheckIcon : EditIcon}
-          data={[10, 30, 40, 50]}
-          pre="sec"
-          onClick={onSecondsSubmit}
-        />
-      )}
 
       <TimerModal
         isOpen={showActionsheet}
